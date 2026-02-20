@@ -82,7 +82,7 @@ struct Dev: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "dev",
     abstract: "WEBServices local factory CLI (English-only).",
-    subcommands: [Bootstrap.self, Doctor.self, New.self, Publish.self]
+    subcommands: [Bootstrap.self, Doctor.self, New.self, Publish.self, Ship.self]
   )
 }
 
@@ -319,5 +319,29 @@ struct Publish: ParsableCommand {
 
       log.info("Published ✅ \(repoSlug)")
     }
+  }
+}
+
+struct Ship: ParsableCommand {
+  static let configuration = CommandConfiguration(abstract: "Create a new project and publish it to GitHub org in one command.")
+
+  @Argument(help: "Project name (e.g. MyNextApp).") var name: String
+  @Option(help: "Template slot (default: macos-swiftui).") var slot: TemplateSlot = .macosSwiftUI
+  @Option(help: "Bundle ID prefix.") var org: String = "com.webservicesdev"
+  @Option(help: "Deployment target.") var target: String = "15.0"
+  @Flag(help: "Create GitHub repo as public (default: private).") var `public`: Bool = false
+
+  func run() throws {
+    var newCmd = New()
+    newCmd.slot = slot
+    newCmd.name = name
+    newCmd.org = org
+    newCmd.target = target
+    try newCmd.run()
+
+    let repoPath = P.workPersonal.appendingPathComponent(name)
+    let pubFlag = `public` ? "--public" : ""
+    _ = try sh("cd '\(repoPath.path)' && dev publish \(pubFlag)")
+    log.info("Shipped ✅ WEBServices-ORG/\(name)")
   }
 }
