@@ -353,7 +353,7 @@ struct Version: ParsableCommand {
 
   func run() throws {
     // Single source of truth for the CLI version (bumped on releases)
-    let version = "0.1.1"
+    let version = "0.1.3"
 
     // Best-effort git SHA (works in repo builds; harmless otherwise)
     let sha = (try? sh("git rev-parse --short HEAD", cwd: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)))?.trimmingCharacters(in: .whitespacesAndNewlines)
