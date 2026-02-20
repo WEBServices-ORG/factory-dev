@@ -9,3 +9,8 @@ DerivedData/
 
 # Factory patch backups
 *.bak.*
+
+# Factory artifacts
+*.bak.*
+.DS_Store
+**/.DS_Store
