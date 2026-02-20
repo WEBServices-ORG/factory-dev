@@ -95,7 +95,7 @@ struct Bootstrap: ParsableCommand {
     try ensureDir(P.config)
     try ensureDir(P.staging)
     try ensureDir(P.workPersonal)
-    try ensureDir(P.root.appendingPathComponent("work/.smoke"))
+    try ensureDir(P.root.appendingPathComponent("work/.factory/.smoke"))
 
     try ensureDir(P.miseDir)
     if !FileManager.default.fileExists(atPath: P.miseToml.path) {
@@ -136,14 +136,14 @@ struct Doctor: ParsableCommand {
 
     // HARD RULE: Smoke test is headless. Xcode must not be open.
     _ = try? sh("osascript -e 'tell application \"Xcode\" to quit'")
+    _ = try? sh("killall Xcode 2>/dev/null || true")
     _ = try? sh("rm -rf ~/Library/Saved\\ Application\\ State/com.apple.dt.Xcode.savedState")
 
     let name = "SmokeApp"
-    let stage = P.root.appendingPathComponent("work/.smoke/\(name)")
-    // Stable smoke project path: never delete (prevents Xcode "workspace disappeared")
-    if FileManager.default.fileExists(atPath: stage.path) {
-      try? FileManager.default.removeItem(at: stage)
-    }
+    let smokeRoot = P.root.appendingPathComponent("work/.factory/.smoke")
+    try ensureDir(smokeRoot)
+    let stage = smokeRoot.appendingPathComponent("run-\(UUID().uuidString)")
+    // Unique smoke workspace per run, under hidden factory folder
     try ensureDir(stage)
 
     let tpl = templatePath(.macosSwiftUI)
@@ -173,6 +173,8 @@ struct Doctor: ParsableCommand {
     log.info("Smoke: xcodebuild test…")
     _ = try sh("cd '\(stagePath)' && xcodebuild test -scheme \(name) -destination 'platform=macOS' -quiet")
 
+    try? FileManager.default.removeItem(at: stage)
+    _ = try? sh("rm -rf ~/Library/Saved\\ Application\\ State/com.apple.dt.Xcode.savedState")
     log.info("Doctor ✅ (including smoke test)")
   }
 }
