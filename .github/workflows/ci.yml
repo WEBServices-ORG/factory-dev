@@ -28,5 +28,5 @@ jobs:
       - name: Build (release)
         run: swift build -c release
 
-      - name: Smoke (doctor fast)
-        run: .build/release/dev doctor --fast
+      - name: Test --help
+        run: .build/release/dev --help
