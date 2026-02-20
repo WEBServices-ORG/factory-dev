@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mise
+        run: brew install mise
+
+      - name: Activate mise
+        shell: bash
+        run: |
+          echo 'eval "$(mise activate bash)"' >> "$GITHUB_ENV"
+
+      - name: Install toolchain (pinned)
+        run: |
+          # dev-cli can work with system swift, but we keep everything consistent
+          mise install || true
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Smoke (doctor fast)
+        run: .build/release/dev doctor --fast
