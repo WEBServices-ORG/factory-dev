@@ -82,7 +82,7 @@ struct Dev: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "dev",
     abstract: "WEBServices local factory CLI (English-only).",
-    subcommands: [Bootstrap.self, Doctor.self, New.self, Publish.self, Ship.self]
+    subcommands: [Bootstrap.self, Doctor.self, New.self, Publish.self, Ship.self, Version.self]
   )
 }
 
@@ -343,5 +343,25 @@ struct Ship: ParsableCommand {
     let devPath = P.tooling.appendingPathComponent("dev-cli/.build/release/dev")
     _ = try sh("cd '\(repoPath.path)' && '\(devPath.path)' publish \(pubFlag)")
     log.info("Shipped ✅ WEBServices-ORG/\(name)")
+  }
+}
+
+
+// dev version
+struct Version: ParsableCommand {
+  static let configuration = CommandConfiguration(abstract: "Print dev CLI version information.")
+
+  func run() throws {
+    // Single source of truth for the CLI version (bumped on releases)
+    let version = "0.1.1"
+
+    // Best-effort git SHA (works in repo builds; harmless otherwise)
+    let sha = (try? sh("git rev-parse --short HEAD", cwd: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)))?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    if let sha, !sha.isEmpty {
+      print("dev \(version) (\(sha))")
+    } else {
+      print("dev \(version)")
+    }
   }
 }
