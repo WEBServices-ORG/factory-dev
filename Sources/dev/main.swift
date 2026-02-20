@@ -332,16 +332,14 @@ struct Ship: ParsableCommand {
   @Flag(help: "Create GitHub repo as public (default: private).") var `public`: Bool = false
 
   func run() throws {
-    var newCmd = New()
-    newCmd.slot = slot
-    newCmd.name = name
-    newCmd.org = org
-    newCmd.target = target
+    let slotValue = slot.rawValue
+    let newCmd = try New.parse([slotValue, name, "--org", org, "--target", target])
     try newCmd.run()
 
     let repoPath = P.workPersonal.appendingPathComponent(name)
     let pubFlag = `public` ? "--public" : ""
-    _ = try sh("cd '\(repoPath.path)' && dev publish \(pubFlag)")
+    let devPath = P.tooling.appendingPathComponent("dev-cli/.build/release/dev")
+    _ = try sh("cd '\(repoPath.path)' && '\(devPath.path)' publish \(pubFlag)")
     log.info("Shipped ✅ WEBServices-ORG/\(name)")
   }
 }
