@@ -17,7 +17,8 @@ jobs:
       - name: Activate mise
         shell: bash
         run: |
-          echo 'eval "$(mise activate bash)"' >> "$GITHUB_ENV"
+          echo "$HOME/.local/share/mise/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.local/share/mise/shims" >> "$GITHUB_PATH"
 
       - name: Install toolchain (pinned)
         run: |
