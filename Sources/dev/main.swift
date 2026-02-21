@@ -64,9 +64,12 @@ func requireXcodeCLT() throws {
     throw RuntimeError(description:
       """
       Xcode Command Line Tools are not installed.
-      Install them and run again:
 
+      Install them and run again:
         xcode-select --install
+
+      Documentation:
+      https://developer.apple.com/xcode/
       """
     )
   }
@@ -374,7 +377,7 @@ struct Version: ParsableCommand {
 
   func run() throws {
     // Single source of truth for the CLI version (bumped on releases)
-    let version = "0.1.10"
+    let version = "0.1.11"
 
     // Best-effort git SHA (works in repo builds; harmless otherwise)
     let sha = (try? sh("git rev-parse --short HEAD", cwd: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)))?.trimmingCharacters(in: .whitespacesAndNewlines)
