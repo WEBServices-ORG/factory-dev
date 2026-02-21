@@ -10,16 +10,8 @@ struct Install: ParsableCommand {
 
         print("Checking Xcode Command Line Tools...")
 
-        let xcodeCheck = Process()
-        xcodeCheck.launchPath = "/usr/bin/xcode-select"
-        xcodeCheck.arguments = ["-p"]
-
         do {
-            try xcodeCheck.run()
-            xcodeCheck.waitUntilExit()
-            if xcodeCheck.terminationStatus != 0 {
-                throw NSError()
-            }
+            try sh("xcode-select -p > /dev/null 2>&1")
         } catch {
             throw RuntimeError(description: """
             Xcode Command Line Tools are not installed.
