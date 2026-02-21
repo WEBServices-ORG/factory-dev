@@ -269,10 +269,18 @@ struct New: ParsableCommand {
     }
 
     // ─────────────────────────────────────
-    // Staging
+    // Clean staging from previous runs
+    // ─────────────────────────────────────
+    try? fm.removeItem(at: P.staging)
+    try ensureDir(P.staging)
+
+    // ─────────────────────────────────────
+    // Staging (transactional)
     // ─────────────────────────────────────
     let stagingDir = P.staging.appendingPathComponent("\(name)-\(UUID().uuidString)")
     try ensureDir(stagingDir)
+
+    defer { try? fm.removeItem(at: stagingDir) }
 
     do {
       // ─────────────────────────────────────
@@ -360,7 +368,6 @@ struct New: ParsableCommand {
       // ─────────────────────────────────────
       try? fm.removeItem(at: P.staging)
     } catch {
-      try? fm.removeItem(at: stagingDir)
       throw error
     }
   }
@@ -449,7 +456,7 @@ struct Ship: ParsableCommand {
 struct Version: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Print dev CLI version information.")
 
-  static let current = "0.1.26"
+  static let current = "0.1.27"
 
   func run() throws {
     // Best-effort git SHA (works in repo builds; harmless otherwise)
