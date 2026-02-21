@@ -388,6 +388,7 @@ struct Ship: ParsableCommand {
   @Flag(help: "Create GitHub repo as public (default: private).") var `public`: Bool = false
 
   func run() throws {
+    try requireTemplateExists(slot)
     let slotValue = slot.rawValue
     let newCmd = try New.parse([slotValue, name, "--org", org, "--target", target])
     try newCmd.run()
@@ -407,7 +408,7 @@ struct Version: ParsableCommand {
 
   func run() throws {
     // Single source of truth for the CLI version (bumped on releases)
-    let version = "0.1.15"
+    let version = "0.1.16"
 
     // Best-effort git SHA (works in repo builds; harmless otherwise)
     let sha = (try? sh("git rev-parse --short HEAD", cwd: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)))?.trimmingCharacters(in: .whitespacesAndNewlines)
