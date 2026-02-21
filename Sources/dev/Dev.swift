@@ -430,7 +430,7 @@ struct Ship: ParsableCommand {
 struct Version: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Print dev CLI version information.")
 
-  static let current = "0.1.31"
+  static let current = "0.1.34"
 
   func run() throws {
     // Best-effort git SHA (works in repo builds; harmless otherwise)
