@@ -128,6 +128,7 @@ struct Bootstrap: ParsableCommand {
   func run() throws {
     // Hard prerequisite first, before touching anything else
     try requireXcodeCLT()
+    try requireMise()
 
     try ensureDir(P.root)
     try ensureDir(P.tooling)
@@ -163,7 +164,8 @@ struct Doctor: ParsableCommand {
     try requireXcodeCLT()
     _ = try sh("xcodebuild -version")
 
-    log.info("Checking toolchain…")
+    log.info("Checking mise…")
+    try requireMise()
     _ = try sh("mise --version")
     _ = try sh("cd '\(P.miseDir.path)' && mise exec tuist -- tuist version")
     _ = try sh("cd '\(P.miseDir.path)' && mise exec swiftlint -- swiftlint version")
@@ -393,7 +395,7 @@ struct Version: ParsableCommand {
 
   func run() throws {
     // Single source of truth for the CLI version (bumped on releases)
-    let version = "0.1.13"
+    let version = "0.1.14"
 
     // Best-effort git SHA (works in repo builds; harmless otherwise)
     let sha = (try? sh("git rev-parse --short HEAD", cwd: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)))?.trimmingCharacters(in: .whitespacesAndNewlines)
