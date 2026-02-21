@@ -248,33 +248,46 @@ struct New: ParsableCommand {
   @Option(help: "Output directory (default: ~/Developer/work/personal/<Name>).") var dir: String?
 
   func run() throws {
+    let fm = FileManager.default
+
+    // ─────────────────────────────────────
+    // Prerequisites
+    // ─────────────────────────────────────
     try requireTemplateExists(template)
     let tpl = templatePath(template)
 
-    let out: URL = {
+    // ─────────────────────────────────────
+    // Define final destination
+    // ─────────────────────────────────────
+    let finalDir: URL = {
       if let dir { return URL(fileURLWithPath: (dir as NSString).expandingTildeInPath) }
       return P.workPersonal.appendingPathComponent(name)
     }()
 
-    if FileManager.default.fileExists(atPath: out.path) {
-      throw RuntimeError(description: "Destination exists: \(out.path)")
+    if fm.fileExists(atPath: finalDir.path) {
+      throw RuntimeError(description: "Directory '\(name)' already exists.")
     }
 
-    let stage = P.staging.appendingPathComponent("\(name)-\(UUID().uuidString)")
-    try ensureDir(stage)
+    // ─────────────────────────────────────
+    // Staging
+    // ─────────────────────────────────────
+    let stagingDir = P.staging.appendingPathComponent("\(name)-\(UUID().uuidString)")
+    try ensureDir(stagingDir)
 
     do {
-      try copyTree(from: tpl, to: stage)
+      // ─────────────────────────────────────
+      // Copy template
+      // ─────────────────────────────────────
+      try copyTree(from: tpl, to: stagingDir)
 
       let tokens: [String:String] = [
         "{{PRODUCT_NAME}}": name,
         "{{BUNDLE_PREFIX}}": org,
         "{{DEPLOYMENT_TARGET}}": target
       ]
-      try replaceTokens(in: stage.appendingPathComponent("Project.swift"), tokens: tokens)
-      try replaceTokens(in: stage.appendingPathComponent("Sources/App/ContentView.swift"), tokens: tokens)
+      try replaceTokens(in: stagingDir.appendingPathComponent("Project.swift"), tokens: tokens)
+      try replaceTokens(in: stagingDir.appendingPathComponent("Sources/App/ContentView.swift"), tokens: tokens)
 
-      // optional tokenized files
       let optionalFiles = [
         "mise.toml",
         ".github/workflows/ci.yml",
@@ -282,30 +295,36 @@ struct New: ParsableCommand {
         "Tests/AppTests/{{PRODUCT_NAME}}Tests.swift"
       ]
       for f in optionalFiles {
-        let u = stage.appendingPathComponent(f)
-        if FileManager.default.fileExists(atPath: u.path) {
+        let u = stagingDir.appendingPathComponent(f)
+        if fm.fileExists(atPath: u.path) {
           try replaceTokens(in: u, tokens: tokens)
         }
       }
 
-      let stagePath = stage.path
-      _ = try sh("cd '\(stagePath)' && mise trust 2>&1 || true")
-      _ = try sh("cd '\(stagePath)' && mise install 2>&1 || true")
-      _ = try sh("cd '\(stagePath)' && mise exec tuist -- tuist generate 2>&1 || true")
-      _ = try sh("cd '\(stagePath)' && git init 2>&1")
+      // ─────────────────────────────────────
+      // Generate Xcode project
+      // ─────────────────────────────────────
+      let stagingPath = stagingDir.path
+      _ = try sh("cd '\(stagingPath)' && mise trust 2>&1 || true")
+      _ = try sh("cd '\(stagingPath)' && mise install 2>&1 || true")
+      _ = try sh("cd '\(stagingPath)' && mise exec tuist -- tuist generate 2>&1 || true")
 
-      // install git hook (after git init)
-      let hookDir = stage.appendingPathComponent(".git/hooks")
+      // ─────────────────────────────────────
+      // Git init + initial commit
+      // ─────────────────────────────────────
+      _ = try sh("cd '\(stagingPath)' && git init 2>&1")
+
+      let hookDir = stagingDir.appendingPathComponent(".git/hooks")
       try ensureDir(hookDir)
-      let srcHook = stage.appendingPathComponent("factory/git-hooks/pre-commit")
+      let srcHook = stagingDir.appendingPathComponent("factory/git-hooks/pre-commit")
       let dstHook = hookDir.appendingPathComponent("pre-commit")
-      if FileManager.default.fileExists(atPath: srcHook.path) {
-        if FileManager.default.fileExists(atPath: dstHook.path) { try FileManager.default.removeItem(at: dstHook) }
-        try FileManager.default.copyItem(at: srcHook, to: dstHook)
+      if fm.fileExists(atPath: srcHook.path) {
+        if fm.fileExists(atPath: dstHook.path) { try fm.removeItem(at: dstHook) }
+        try fm.copyItem(at: srcHook, to: dstHook)
         _ = try sh("chmod +x '\(dstHook.path)'")
       }
 
-      _ = try sh("cd '\(stagePath)' && git add .")
+      _ = try sh("cd '\(stagingPath)' && git add .")
       let env = [
         "GIT_AUTHOR_NAME": "WEBServices Factory",
         "GIT_AUTHOR_EMAIL": "admin@webservicesdev.com",
@@ -314,23 +333,29 @@ struct New: ParsableCommand {
         "GIT_AUTHOR_DATE": "2000-01-01T00:00:00Z",
         "GIT_COMMITTER_DATE": "2000-01-01T00:00:00Z",
       ]
-      _ = try sh("cd '\(stagePath)' && git commit -m \"Initial commit\"", env: env)
+      _ = try sh("cd '\(stagingPath)' && git commit -m \"Initial commit\"", env: env)
 
-      try ensureDir(out.deletingLastPathComponent())
-      try FileManager.default.moveItem(at: stage, to: out)
+      // ─────────────────────────────────────
+      // Atomic move to final destination
+      // ─────────────────────────────────────
+      try ensureDir(finalDir.deletingLastPathComponent())
+      try fm.moveItem(at: stagingDir, to: finalDir)
 
-      let finalWorkspace = out.appendingPathComponent("\(name).xcworkspace")
-      let finalProject = out.appendingPathComponent("\(name).xcodeproj")
+      // ─────────────────────────────────────
+      // Open in Xcode
+      // ─────────────────────────────────────
+      let workspace = finalDir.appendingPathComponent("\(name).xcworkspace")
+      let project = finalDir.appendingPathComponent("\(name).xcodeproj")
 
-      if FileManager.default.fileExists(atPath: finalWorkspace.path) {
-        try sh("open \"\(finalWorkspace.path)\"")
-      } else if FileManager.default.fileExists(atPath: finalProject.path) {
-        try sh("open \"\(finalProject.path)\"")
+      if fm.fileExists(atPath: workspace.path) {
+        try sh("open \"\(workspace.path)\"")
+      } else if fm.fileExists(atPath: project.path) {
+        try sh("open \"\(project.path)\"")
       }
 
-      log.info("Created ✅ \(out.path)")
+      log.info("Created ✅ \(finalDir.path)")
     } catch {
-      try? FileManager.default.removeItem(at: stage)
+      try? fm.removeItem(at: stagingDir)
       throw error
     }
   }
@@ -419,7 +444,7 @@ struct Ship: ParsableCommand {
 struct Version: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Print dev CLI version information.")
 
-  static let current = "0.1.22"
+  static let current = "0.1.23"
 
   func run() throws {
     // Best-effort git SHA (works in repo builds; harmless otherwise)
