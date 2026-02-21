@@ -81,10 +81,11 @@ func requireMise() throws {
       """
       Required tool 'mise' is not installed.
 
-      Install mise and run again:
+      Install mise:
         https://mise.jdx.dev/
 
-      Foundry requires a deterministic toolchain.
+      Then run:
+        foundry install
       """
     )
   }
@@ -392,7 +393,7 @@ struct Version: ParsableCommand {
 
   func run() throws {
     // Single source of truth for the CLI version (bumped on releases)
-    let version = "0.1.12"
+    let version = "0.1.13"
 
     // Best-effort git SHA (works in repo builds; harmless otherwise)
     let sha = (try? sh("git rev-parse --short HEAD", cwd: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)))?.trimmingCharacters(in: .whitespacesAndNewlines)
