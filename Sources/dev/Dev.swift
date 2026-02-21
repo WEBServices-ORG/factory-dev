@@ -139,7 +139,7 @@ struct Dev: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "dev",
     abstract: "WEBServices local factory CLI (English-only).",
-    subcommands: [Bootstrap.self, Doctor.self, New.self, Publish.self, Ship.self, Version.self]
+    subcommands: [Install.self, Bootstrap.self, Doctor.self, New.self, Publish.self, Ship.self, Version.self]
   )
 }
 
@@ -410,7 +410,7 @@ struct Ship: ParsableCommand {
 struct Version: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Print dev CLI version information.")
 
-  static let current = "0.1.18"
+  static let current = "0.1.19"
 
   func run() throws {
     // Best-effort git SHA (works in repo builds; harmless otherwise)
