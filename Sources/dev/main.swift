@@ -1,6 +1,7 @@
 import Foundation
 import ArgumentParser
 import Logging
+// (no new deps)
 
 enum P {
   static let home = FileManager.default.homeDirectoryForCurrentUser
@@ -54,6 +55,23 @@ func replaceTokens(in url: URL, tokens: [String:String]) throws {
   try write(url, s)
 }
 
+/// Hard requirement: Xcode Command Line Tools must be installed.
+/// Apple-mode: do not auto-install; stop with a clear instruction.
+func requireXcodeCLT() throws {
+  do {
+    _ = try sh("xcode-select -p")
+  } catch {
+    throw RuntimeError(description:
+      """
+      Xcode Command Line Tools are not installed.
+      Install them and run again:
+
+        xcode-select --install
+      """
+    )
+  }
+}
+
 enum TemplateSlot: String, CaseIterable, ExpressibleByArgument {
   case macosSwiftUI = "macos-swiftui"
   case internalLib  = "internal-lib"
@@ -89,6 +107,9 @@ struct Dev: ParsableCommand {
 struct Bootstrap: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Bootstrap local factory.")
   func run() throws {
+    // Hard prerequisite first, before touching anything else
+    try requireXcodeCLT()
+
     try ensureDir(P.root)
     try ensureDir(P.tooling)
     try ensureDir(P.templates)
@@ -119,8 +140,8 @@ struct Doctor: ParsableCommand {
   @Flag(help: "Skip smoke test (fast).") var fast: Bool = false
 
   func run() throws {
-    log.info("Checking Xcode…")
-    _ = try sh("xcode-select -p")
+    log.info("Checking Xcode Command Line Tools…")
+    try requireXcodeCLT()
     _ = try sh("xcodebuild -version")
 
     log.info("Checking toolchain…")
