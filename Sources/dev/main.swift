@@ -91,6 +91,22 @@ func requireMise() throws {
   }
 }
 
+func requireTemplateExists(_ slot: TemplateSlot) throws {
+  let src = templatePath(slot)
+  guard FileManager.default.fileExists(atPath: src.path) else {
+    throw RuntimeError(description:
+      """
+      Template '\(slot.rawValue)' not found.
+
+      Run:
+        foundry install
+
+      If the problem persists, reinstall Foundry.
+      """
+    )
+  }
+}
+
 enum TemplateSlot: String, CaseIterable, ExpressibleByArgument {
   case macosSwiftUI = "macos-swiftui"
   case internalLib  = "internal-lib"
@@ -188,10 +204,8 @@ struct Doctor: ParsableCommand {
     // Unique smoke workspace per run, under hidden factory folder
     try ensureDir(stage)
 
+    try requireTemplateExists(.macosSwiftUI)
     let tpl = templatePath(.macosSwiftUI)
-    guard FileManager.default.fileExists(atPath: tpl.path) else {
-      throw RuntimeError(description: "Template missing: \(tpl.path)")
-    }
     try copyTree(from: tpl, to: stage)
 
     let tokens: [String:String] = [
@@ -230,10 +244,8 @@ struct New: ParsableCommand {
   @Option(help: "Output directory (default: ~/Developer/work/personal/<Name>).") var dir: String?
 
   func run() throws {
+    try requireTemplateExists(slot)
     let tpl = templatePath(slot)
-    guard FileManager.default.fileExists(atPath: tpl.path) else {
-      throw RuntimeError(description: "Template slot not found: \(tpl.path)")
-    }
 
     let out: URL = {
       if let dir { return URL(fileURLWithPath: (dir as NSString).expandingTildeInPath) }
@@ -395,7 +407,7 @@ struct Version: ParsableCommand {
 
   func run() throws {
     // Single source of truth for the CLI version (bumped on releases)
-    let version = "0.1.14"
+    let version = "0.1.15"
 
     // Best-effort git SHA (works in repo builds; harmless otherwise)
     let sha = (try? sh("git rev-parse --short HEAD", cwd: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)))?.trimmingCharacters(in: .whitespacesAndNewlines)
