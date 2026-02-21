@@ -240,16 +240,16 @@ struct Doctor: ParsableCommand {
 }
 
 struct New: ParsableCommand {
-  static let configuration = CommandConfiguration(abstract: "Create a new project from a template slot.")
-  @Argument(help: "Template slot (macos-swiftui / internal-lib / cli-tool).") var slot: TemplateSlot
-  @Argument(help: "Project name (e.g. DemoApp).") var name: String
+  static let configuration = CommandConfiguration(abstract: "Create a new project from a template.")
+  @Argument(help: "App name.") var name: String
+  @Option(name: .shortAndLong, help: "Template (default: macos-swiftui).") var template: TemplateSlot = .macosSwiftUI
   @Option(help: "Bundle ID prefix.") var org: String = "com.webservicesdev"
   @Option(help: "Deployment target (macOS).") var target: String = "15.0"
   @Option(help: "Output directory (default: ~/Developer/work/personal/<Name>).") var dir: String?
 
   func run() throws {
-    try requireTemplateExists(slot)
-    let tpl = templatePath(slot)
+    try requireTemplateExists(template)
+    let tpl = templatePath(template)
 
     let out: URL = {
       if let dir { return URL(fileURLWithPath: (dir as NSString).expandingTildeInPath) }
@@ -385,16 +385,15 @@ struct Publish: ParsableCommand {
 struct Ship: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Create a new project and publish it to GitHub org in one command.")
 
-  @Argument(help: "Project name (e.g. MyNextApp).") var name: String
-  @Option(help: "Template slot (default: macos-swiftui).") var slot: TemplateSlot = .macosSwiftUI
+  @Argument(help: "App name.") var name: String
+  @Option(name: .shortAndLong, help: "Template (default: macos-swiftui).") var template: TemplateSlot = .macosSwiftUI
   @Option(help: "Bundle ID prefix.") var org: String = "com.webservicesdev"
   @Option(help: "Deployment target.") var target: String = "15.0"
   @Flag(help: "Create GitHub repo as public (default: private).") var `public`: Bool = false
 
   func run() throws {
-    try requireTemplateExists(slot)
-    let slotValue = slot.rawValue
-    let newCmd = try New.parse([slotValue, name, "--org", org, "--target", target])
+    try requireTemplateExists(template)
+    let newCmd = try New.parse([name, "--template", template.rawValue, "--org", org, "--target", target])
     try newCmd.run()
 
     let repoPath = P.workPersonal.appendingPathComponent(name)
@@ -410,7 +409,7 @@ struct Ship: ParsableCommand {
 struct Version: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Print dev CLI version information.")
 
-  static let current = "0.1.20"
+  static let current = "0.1.21"
 
   func run() throws {
     // Best-effort git SHA (works in repo builds; harmless otherwise)
