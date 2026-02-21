@@ -26,9 +26,14 @@ struct Doctor: ParsableCommand {
         }
 
         try check("Developer directory") {
-            let path = NSHomeDirectory() + "/Developer"
-            if !fm.fileExists(atPath: path) {
+            if !fm.fileExists(atPath: P.root.path) {
                 throw RuntimeError(description: "Missing ~/Developer")
+            }
+        }
+
+        try check("Templates") {
+            if !fm.fileExists(atPath: P.templates.path) {
+                throw RuntimeError(description: "Missing templates")
             }
         }
 
