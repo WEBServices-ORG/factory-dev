@@ -406,17 +406,16 @@ struct Ship: ParsableCommand {
 struct Version: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Print dev CLI version information.")
 
-  func run() throws {
-    // Single source of truth for the CLI version (bumped on releases)
-    let version = "0.1.16"
+  static let current = "0.1.17"
 
+  func run() throws {
     // Best-effort git SHA (works in repo builds; harmless otherwise)
     let sha = (try? sh("git rev-parse --short HEAD", cwd: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)))?.trimmingCharacters(in: .whitespacesAndNewlines)
 
     if let sha, !sha.isEmpty {
-      print("dev \(version) (\(sha))")
+      print("foundry \(Version.current) (\(sha))")
     } else {
-      print("dev \(version)")
+      print("foundry \(Version.current)")
     }
   }
 }
