@@ -75,6 +75,21 @@ func requireXcodeCLT() throws {
   }
 }
 
+func requireMise() throws {
+  guard (try? sh("command -v mise")) != nil else {
+    throw RuntimeError(description:
+      """
+      Required tool 'mise' is not installed.
+
+      Install mise and run again:
+        https://mise.jdx.dev/
+
+      Foundry requires a deterministic toolchain.
+      """
+    )
+  }
+}
+
 enum TemplateSlot: String, CaseIterable, ExpressibleByArgument {
   case macosSwiftUI = "macos-swiftui"
   case internalLib  = "internal-lib"
@@ -377,7 +392,7 @@ struct Version: ParsableCommand {
 
   func run() throws {
     // Single source of truth for the CLI version (bumped on releases)
-    let version = "0.1.11"
+    let version = "0.1.12"
 
     // Best-effort git SHA (works in repo builds; harmless otherwise)
     let sha = (try? sh("git rev-parse --short HEAD", cwd: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)))?.trimmingCharacters(in: .whitespacesAndNewlines)
