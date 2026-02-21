@@ -227,7 +227,7 @@ struct Doctor: ParsableCommand {
     let stagePath = stage.path
     _ = try sh("cd '\(stagePath)' && mise trust")
     _ = try sh("cd '\(stagePath)' && mise install")
-    _ = try sh("cd '\(stagePath)' && mise exec tuist -- tuist generate")
+    _ = try sh("cd '\(stagePath)' && mise exec tuist -- tuist generate --no-open")
     _ = try? sh("osascript -e 'tell application \"Xcode\" to quit'")
 
     log.info("Smoke: xcodebuild test…")
@@ -315,7 +315,7 @@ struct New: ParsableCommand {
       let stagingPath = stagingDir.path
       _ = try sh("cd '\(stagingPath)' && mise trust 2>&1 || true")
       _ = try sh("cd '\(stagingPath)' && mise install 2>&1 || true")
-      _ = try sh("cd '\(stagingPath)' && mise exec tuist -- tuist generate 2>&1 || true")
+      _ = try sh("cd '\(stagingPath)' && mise exec tuist -- tuist generate --no-open 2>&1 || true")
 
       // ─────────────────────────────────────
       // Git init + initial commit
@@ -456,7 +456,7 @@ struct Ship: ParsableCommand {
 struct Version: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Print dev CLI version information.")
 
-  static let current = "0.1.27"
+  static let current = "0.1.28"
 
   func run() throws {
     // Best-effort git SHA (works in repo builds; harmless otherwise)
