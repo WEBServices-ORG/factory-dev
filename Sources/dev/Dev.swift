@@ -13,6 +13,12 @@ enum P {
   static let workPersonal = root
   static let miseDir = config.appendingPathComponent("mise")
   static let miseToml = miseDir.appendingPathComponent("mise.toml")
+  static let templatesCache = config.appendingPathComponent("templates-cache")
+}
+
+enum TemplateSource {
+  static let repoURL = "https://github.com/WEBServices-ORG/factory-templates.git"
+  static let ref = "550f746ab65b477eb206539c8445c4bcd5f0cf94"
 }
 
 struct RuntimeError: Error, CustomStringConvertible { let description: String }
@@ -88,23 +94,50 @@ func requireMise() throws {
 
 func ensureEnvironmentReady() throws {
   let fm = FileManager.default
-  
-  if !fm.fileExists(atPath: P.root.path) {
-    try ensureDir(P.root)
-    try ensureDir(P.tooling)
-    try ensureDir(P.config)
+
+  try ensureDir(P.root)
+  try ensureDir(P.tooling)
+  try ensureDir(P.config)
+  try ensureDir(P.templates)
+  try ensureDir(P.templatesCache)
+
+  let localTemplate = P.templates.appendingPathComponent("macos-swiftui")
+  if fm.fileExists(atPath: localTemplate.path) {
+    return
   }
-  
-  if !fm.fileExists(atPath: P.templates.path) {
-    try ensureDir(P.templates)
-    let templatesRepo = P.templates.appendingPathComponent("factory-templates")
-    _ = try? sh("git clone https://github.com/WEBServices-ORG/factory-templates.git '\(templatesRepo.path)' 2>/dev/null || true")
-    
-    let src = templatesRepo.appendingPathComponent("swiftui-macos-app")
-    let dst = P.templates.appendingPathComponent("macos-swiftui")
-    if fm.fileExists(atPath: src.path) && !fm.fileExists(atPath: dst.path) {
-      try fm.copyItem(at: src, to: dst)
+
+  let cachedTemplate = P.templatesCache.appendingPathComponent("macos-swiftui")
+  let templatesRepo = P.templates.appendingPathComponent("factory-templates")
+  let sourceTemplate = templatesRepo.appendingPathComponent("swiftui-macos-app")
+
+  try? fm.removeItem(at: templatesRepo)
+
+  do {
+    let cloneCmd = "git clone --depth 1 '\(TemplateSource.repoURL)' '\(templatesRepo.path)'"
+    _ = try sh(cloneCmd)
+    _ = try sh("git -C '\(templatesRepo.path)' checkout '\(TemplateSource.ref)'")
+
+    guard fm.fileExists(atPath: sourceTemplate.path) else {
+      throw RuntimeError(description: "Template source '\(sourceTemplate.path)' not found in factory-templates at ref '\(TemplateSource.ref)'.")
     }
+
+    try fm.copyItem(at: sourceTemplate, to: localTemplate)
+    try? fm.removeItem(at: cachedTemplate)
+    try fm.copyItem(at: sourceTemplate, to: cachedTemplate)
+  } catch {
+    if fm.fileExists(atPath: cachedTemplate.path) {
+      try fm.copyItem(at: cachedTemplate, to: localTemplate)
+      return
+    }
+
+    throw RuntimeError(description:
+      """
+      Unable to fetch templates from '\(TemplateSource.repoURL)' at ref '\(TemplateSource.ref)' and no local cache is available.
+
+      Original error:
+      \(error)
+      """
+    )
   }
 }
 
