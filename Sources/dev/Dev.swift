@@ -1,6 +1,7 @@
 import Foundation
 import ArgumentParser
 import Logging
+// (no new deps)
 
 enum P {
   static let home = FileManager.default.homeDirectoryForCurrentUser
@@ -54,6 +55,62 @@ func replaceTokens(in url: URL, tokens: [String:String]) throws {
   try write(url, s)
 }
 
+/// Hard requirement: Xcode Command Line Tools must be installed.
+/// Apple-mode: do not auto-install; stop with a clear instruction.
+func requireXcodeCLT() throws {
+  do {
+    _ = try sh("xcode-select -p")
+  } catch {
+    throw RuntimeError(description:
+      """
+      Xcode Command Line Tools are not installed.
+
+      Install and run again:
+        xcode-select --install
+
+      Documentation:
+        https://developer.apple.com/xcode/
+
+      Foundry maintains a canonical local environment.
+      """
+    )
+  }
+}
+
+func requireMise() throws {
+  guard (try? sh("command -v mise")) != nil else {
+    throw RuntimeError(description:
+      """
+      Required tool 'mise' is not installed.
+
+      Install mise:
+        https://mise.jdx.dev/
+
+      Then run:
+        foundry install
+
+      Foundry maintains a canonical local environment.
+      """
+    )
+  }
+}
+
+func requireTemplateExists(_ slot: TemplateSlot) throws {
+  let src = templatePath(slot)
+  guard FileManager.default.fileExists(atPath: src.path) else {
+    throw RuntimeError(description:
+      """
+      Required template not found.
+
+      Run:
+        foundry install
+
+      Foundry maintains a canonical local environment.
+      """
+    )
+  }
+}
+
 enum TemplateSlot: String, CaseIterable, ExpressibleByArgument {
   case macosSwiftUI = "macos-swiftui"
   case internalLib  = "internal-lib"
@@ -82,13 +139,17 @@ struct Dev: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "dev",
     abstract: "WEBServices local factory CLI (English-only).",
-    subcommands: [Bootstrap.self, Doctor.self, New.self, Publish.self, Ship.self, Version.self]
+    subcommands: [Install.self, Bootstrap.self, Doctor.self, New.self, Publish.self, Ship.self, Version.self]
   )
 }
 
 struct Bootstrap: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Bootstrap local factory.")
   func run() throws {
+    // Hard prerequisite first, before touching anything else
+    try requireXcodeCLT()
+    try requireMise()
+
     try ensureDir(P.root)
     try ensureDir(P.tooling)
     try ensureDir(P.templates)
@@ -119,11 +180,12 @@ struct Doctor: ParsableCommand {
   @Flag(help: "Skip smoke test (fast).") var fast: Bool = false
 
   func run() throws {
-    log.info("Checking Xcode…")
-    _ = try sh("xcode-select -p")
+    log.info("Checking Xcode Command Line Tools…")
+    try requireXcodeCLT()
     _ = try sh("xcodebuild -version")
 
-    log.info("Checking toolchain…")
+    log.info("Checking mise…")
+    try requireMise()
     _ = try sh("mise --version")
     _ = try sh("cd '\(P.miseDir.path)' && mise exec tuist -- tuist version")
     _ = try sh("cd '\(P.miseDir.path)' && mise exec swiftlint -- swiftlint version")
@@ -146,10 +208,8 @@ struct Doctor: ParsableCommand {
     // Unique smoke workspace per run, under hidden factory folder
     try ensureDir(stage)
 
+    try requireTemplateExists(.macosSwiftUI)
     let tpl = templatePath(.macosSwiftUI)
-    guard FileManager.default.fileExists(atPath: tpl.path) else {
-      throw RuntimeError(description: "Template missing: \(tpl.path)")
-    }
     try copyTree(from: tpl, to: stage)
 
     let tokens: [String:String] = [
@@ -188,10 +248,8 @@ struct New: ParsableCommand {
   @Option(help: "Output directory (default: ~/Developer/work/personal/<Name>).") var dir: String?
 
   func run() throws {
+    try requireTemplateExists(slot)
     let tpl = templatePath(slot)
-    guard FileManager.default.fileExists(atPath: tpl.path) else {
-      throw RuntimeError(description: "Template slot not found: \(tpl.path)")
-    }
 
     let out: URL = {
       if let dir { return URL(fileURLWithPath: (dir as NSString).expandingTildeInPath) }
@@ -334,6 +392,7 @@ struct Ship: ParsableCommand {
   @Flag(help: "Create GitHub repo as public (default: private).") var `public`: Bool = false
 
   func run() throws {
+    try requireTemplateExists(slot)
     let slotValue = slot.rawValue
     let newCmd = try New.parse([slotValue, name, "--org", org, "--target", target])
     try newCmd.run()
@@ -351,17 +410,16 @@ struct Ship: ParsableCommand {
 struct Version: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Print dev CLI version information.")
 
-  func run() throws {
-    // Single source of truth for the CLI version (bumped on releases)
-    let version = "0.1.6"
+  static let current = "0.1.20"
 
+  func run() throws {
     // Best-effort git SHA (works in repo builds; harmless otherwise)
     let sha = (try? sh("git rev-parse --short HEAD", cwd: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)))?.trimmingCharacters(in: .whitespacesAndNewlines)
 
     if let sha, !sha.isEmpty {
-      print("dev \(version) (\(sha))")
+      print("foundry \(Version.current) (\(sha))")
     } else {
-      print("dev \(version)")
+      print("foundry \(Version.current)")
     }
   }
 }

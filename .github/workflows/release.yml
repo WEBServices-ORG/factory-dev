@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build-macos:
+    strategy:
+      matrix:
+        include:
+          # Intel runner (x86_64)
+          - runs_on: macos-13
+            asset: dev-macos-x86_64
+            arch: x86_64
+          # Apple Silicon runner (arm64) — GitHub supports this on newer macOS runners
+          - runs_on: macos-14
+            asset: dev-macos-arm64
+            arch: arm64
+    runs-on: ${{ matrix.runs_on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release
+        run: |
+          swift build -c release
+          mkdir -p dist
+          cp .build/release/dev dist/${{ matrix.asset }}
+          chmod +x dist/${{ matrix.asset }}
+
+      - name: Sha256
+        run: |
+          shasum -a 256 dist/${{ matrix.asset }} | awk '{print $1}' > dist/${{ matrix.asset }}.sha256
+          cat dist/${{ matrix.asset }}.sha256
+
+      - name: Upload artifacts to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/${{ matrix.asset }}
+            dist/${{ matrix.asset }}.sha256
