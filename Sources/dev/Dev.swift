@@ -6,6 +6,8 @@ import Logging
 enum P {
   static let home = FileManager.default.homeDirectoryForCurrentUser
   static let root = home.appendingPathComponent("Developer")
+  static let appSupport = home.appendingPathComponent("Library/Application Support/SoloFoundryStudio")
+  static let trialState = appSupport.appendingPathComponent("trial-state.json")
   static let tooling = root.appendingPathComponent("tooling")
   static let templates = root.appendingPathComponent("templates")
   static let config = root.appendingPathComponent("config")
@@ -163,6 +165,60 @@ func templatePath(_ slot: TemplateSlot) -> URL {
   }
 }
 
+struct TrialState: Codable {
+  let consumedRuns: Int
+}
+
+enum TrialPolicy {
+  static let maxRuns = 10
+}
+
+func loadTrialState() throws -> TrialState {
+  let fm = FileManager.default
+  if !fm.fileExists(atPath: P.trialState.path) {
+    return TrialState(consumedRuns: 0)
+  }
+
+  do {
+    let data = try Data(contentsOf: P.trialState)
+    return try JSONDecoder().decode(TrialState.self, from: data)
+  } catch {
+    throw RuntimeError(description: "Failed to read trial state at \(P.trialState.path). Remove the file if it is corrupted and retry.")
+  }
+}
+
+func saveTrialState(_ state: TrialState) throws {
+  do {
+    try ensureDir(P.appSupport)
+    let data = try JSONEncoder().encode(state)
+    try data.write(to: P.trialState, options: .atomic)
+  } catch {
+    throw RuntimeError(description: "Failed to save trial state: \(error)")
+  }
+}
+
+func requireTrialCapacity() throws {
+  let state = try loadTrialState()
+  if state.consumedRuns >= TrialPolicy.maxRuns {
+    throw RuntimeError(description: "Trial limit reached. Activate a license to continue.")
+  }
+}
+
+func consumeTrialRun() throws {
+  let state = try loadTrialState()
+  let next = TrialState(consumedRuns: state.consumedRuns + 1)
+  try saveTrialState(next)
+}
+
+func trialStatusLine() throws -> String {
+  let state = try loadTrialState()
+  let remaining = max(0, TrialPolicy.maxRuns - state.consumedRuns)
+  if remaining == 0 {
+    return "Trial limit reached. Activate a license to continue."
+  }
+  return "Trial left: \(remaining)/\(TrialPolicy.maxRuns) runs left"
+}
+
 let log: Logger = {
   LoggingSystem.bootstrap { label in
     var h = StreamLogHandler.standardOutput(label: label)
@@ -177,7 +233,7 @@ struct Dev: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "dev",
     abstract: "WEBServices local factory CLI (English-only).",
-    subcommands: [Install.self, Bootstrap.self, Doctor.self, New.self, Publish.self, Ship.self, Version.self]
+    subcommands: [Install.self, Bootstrap.self, Doctor.self, Trial.self, New.self, Publish.self, Ship.self, Version.self]
   )
 }
 
@@ -213,6 +269,121 @@ struct Bootstrap: ParsableCommand {
   }
 }
 
+struct Trial: ParsableCommand {
+  static let configuration = CommandConfiguration(
+    abstract: "Trial management commands.",
+    subcommands: [TrialStatus.self]
+  )
+}
+
+struct TrialStatus: ParsableCommand {
+  static let configuration = CommandConfiguration(commandName: "status", abstract: "Show trial usage and remaining runs.")
+
+  func run() throws {
+    print(try trialStatusLine())
+  }
+}
+
+func runNewWorkflow(
+  name: String,
+  template: TemplateSlot,
+  org: String,
+  target: String,
+  dir: String?
+) throws {
+  let fm = FileManager.default
+
+  try requireTemplateExists(template)
+  let tpl = templatePath(template)
+
+  let finalDir: URL = {
+    if let dir { return URL(fileURLWithPath: (dir as NSString).expandingTildeInPath) }
+    return P.workPersonal.appendingPathComponent(name)
+  }()
+
+  if fm.fileExists(atPath: finalDir.path) {
+    throw RuntimeError(description: "Directory '\(name)' already exists.")
+  }
+
+  try? fm.removeItem(at: P.staging)
+  try ensureDir(P.staging)
+
+  let stagingDir = P.staging.appendingPathComponent("\(name)-\(UUID().uuidString)")
+  try ensureDir(stagingDir)
+
+  defer { try? fm.removeItem(at: stagingDir) }
+
+  do {
+    try copyTree(from: tpl, to: stagingDir)
+
+    let tokens: [String:String] = [
+      "{{PRODUCT_NAME}}": name,
+      "{{BUNDLE_PREFIX}}": org,
+      "{{DEPLOYMENT_TARGET}}": target
+    ]
+    try replaceTokens(in: stagingDir.appendingPathComponent("Project.swift"), tokens: tokens)
+    try replaceTokens(in: stagingDir.appendingPathComponent("Sources/App/ContentView.swift"), tokens: tokens)
+
+    let optionalFiles = [
+      "mise.toml",
+      ".github/workflows/ci.yml",
+      "factory/git-hooks/pre-commit",
+      "Tests/AppTests/{{PRODUCT_NAME}}Tests.swift"
+    ]
+    for f in optionalFiles {
+      let u = stagingDir.appendingPathComponent(f)
+      if fm.fileExists(atPath: u.path) {
+        try replaceTokens(in: u, tokens: tokens)
+      }
+    }
+
+    let stagingPath = stagingDir.path
+    _ = try sh("cd '\(stagingPath)' && mise trust 2>&1 || true")
+    _ = try sh("cd '\(stagingPath)' && mise install 2>&1 || true")
+    _ = try sh("cd '\(stagingPath)' && mise exec tuist -- tuist generate --no-open 2>&1 || true")
+
+    _ = try sh("cd '\(stagingPath)' && git init 2>&1")
+
+    let hookDir = stagingDir.appendingPathComponent(".git/hooks")
+    try ensureDir(hookDir)
+    let srcHook = stagingDir.appendingPathComponent("factory/git-hooks/pre-commit")
+    let dstHook = hookDir.appendingPathComponent("pre-commit")
+    if fm.fileExists(atPath: srcHook.path) {
+      if fm.fileExists(atPath: dstHook.path) { try fm.removeItem(at: dstHook) }
+      try fm.copyItem(at: srcHook, to: dstHook)
+      _ = try sh("chmod +x '\(dstHook.path)'")
+    }
+
+    _ = try sh("cd '\(stagingPath)' && git add .")
+    let env = [
+      "GIT_AUTHOR_NAME": "WEBServices Factory",
+      "GIT_AUTHOR_EMAIL": "admin@webservicesdev.com",
+      "GIT_COMMITTER_NAME": "WEBServices Factory",
+      "GIT_COMMITTER_EMAIL": "admin@webservicesdev.com",
+      "GIT_AUTHOR_DATE": "2000-01-01T00:00:00Z",
+      "GIT_COMMITTER_DATE": "2000-01-01T00:00:00Z",
+    ]
+    _ = try sh("cd '\(stagingPath)' && git commit -m \"Initial commit\"", env: env)
+
+    try ensureDir(finalDir.deletingLastPathComponent())
+    try fm.moveItem(at: stagingDir, to: finalDir)
+
+    let workspace = finalDir.appendingPathComponent("\(name).xcworkspace")
+    let project = finalDir.appendingPathComponent("\(name).xcodeproj")
+
+    if fm.fileExists(atPath: workspace.path) {
+      try sh("open \"\(workspace.path)\"")
+    } else if fm.fileExists(atPath: project.path) {
+      try sh("open \"\(project.path)\"")
+    }
+
+    log.info("Created ✅ \(finalDir.path)")
+    try? fm.removeItem(at: P.staging)
+  } catch {
+    throw error
+  }
+}
+
 struct New: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Create a new project from a template.")
   @Argument(help: "App name.") var name: String
@@ -222,135 +393,17 @@ struct New: ParsableCommand {
   @Option(help: "Output directory (default: ~/Developer/<Name>).") var dir: String?
 
   func run() throws {
-    let fm = FileManager.default
-
-    // ─────────────────────────────────────
-    // Prerequisites
-    // ─────────────────────────────────────
-    try requireTemplateExists(template)
-    let tpl = templatePath(template)
-
-    // ─────────────────────────────────────
-    // Define final destination
-    // ─────────────────────────────────────
-    let finalDir: URL = {
-      if let dir { return URL(fileURLWithPath: (dir as NSString).expandingTildeInPath) }
-      return P.workPersonal.appendingPathComponent(name)
-    }()
-
-    if fm.fileExists(atPath: finalDir.path) {
-      throw RuntimeError(description: "Directory '\(name)' already exists.")
-    }
-
-    // ─────────────────────────────────────
-    // Clean staging from previous runs
-    // ─────────────────────────────────────
-    try? fm.removeItem(at: P.staging)
-    try ensureDir(P.staging)
-
-    // ─────────────────────────────────────
-    // Staging (transactional)
-    // ─────────────────────────────────────
-    let stagingDir = P.staging.appendingPathComponent("\(name)-\(UUID().uuidString)")
-    try ensureDir(stagingDir)
-
-    defer { try? fm.removeItem(at: stagingDir) }
-
-    do {
-      // ─────────────────────────────────────
-      // Copy template
-      // ─────────────────────────────────────
-      try copyTree(from: tpl, to: stagingDir)
-
-      let tokens: [String:String] = [
-        "{{PRODUCT_NAME}}": name,
-        "{{BUNDLE_PREFIX}}": org,
-        "{{DEPLOYMENT_TARGET}}": target
-      ]
-      try replaceTokens(in: stagingDir.appendingPathComponent("Project.swift"), tokens: tokens)
-      try replaceTokens(in: stagingDir.appendingPathComponent("Sources/App/ContentView.swift"), tokens: tokens)
-
-      let optionalFiles = [
-        "mise.toml",
-        ".github/workflows/ci.yml",
-        "factory/git-hooks/pre-commit",
-        "Tests/AppTests/{{PRODUCT_NAME}}Tests.swift"
-      ]
-      for f in optionalFiles {
-        let u = stagingDir.appendingPathComponent(f)
-        if fm.fileExists(atPath: u.path) {
-          try replaceTokens(in: u, tokens: tokens)
-        }
-      }
-
-      // ─────────────────────────────────────
-      // Generate Xcode project
-      // ─────────────────────────────────────
-      let stagingPath = stagingDir.path
-      _ = try sh("cd '\(stagingPath)' && mise trust 2>&1 || true")
-      _ = try sh("cd '\(stagingPath)' && mise install 2>&1 || true")
-      _ = try sh("cd '\(stagingPath)' && mise exec tuist -- tuist generate --no-open 2>&1 || true")
-
-      // ─────────────────────────────────────
-      // Git init + initial commit
-      // ─────────────────────────────────────
-      _ = try sh("cd '\(stagingPath)' && git init 2>&1")
-
-      let hookDir = stagingDir.appendingPathComponent(".git/hooks")
-      try ensureDir(hookDir)
-      let srcHook = stagingDir.appendingPathComponent("factory/git-hooks/pre-commit")
-      let dstHook = hookDir.appendingPathComponent("pre-commit")
-      if fm.fileExists(atPath: srcHook.path) {
-        if fm.fileExists(atPath: dstHook.path) { try fm.removeItem(at: dstHook) }
-        try fm.copyItem(at: srcHook, to: dstHook)
-        _ = try sh("chmod +x '\(dstHook.path)'")
-      }
-
-      _ = try sh("cd '\(stagingPath)' && git add .")
-      let env = [
-        "GIT_AUTHOR_NAME": "WEBServices Factory",
-        "GIT_AUTHOR_EMAIL": "admin@webservicesdev.com",
-        "GIT_COMMITTER_NAME": "WEBServices Factory",
-        "GIT_COMMITTER_EMAIL": "admin@webservicesdev.com",
-        "GIT_AUTHOR_DATE": "2000-01-01T00:00:00Z",
-        "GIT_COMMITTER_DATE": "2000-01-01T00:00:00Z",
-      ]
-      _ = try sh("cd '\(stagingPath)' && git commit -m \"Initial commit\"", env: env)
-
-      // ─────────────────────────────────────
-      // Atomic move to final destination
-      // ─────────────────────────────────────
-      try ensureDir(finalDir.deletingLastPathComponent())
-      try fm.moveItem(at: stagingDir, to: finalDir)
-
-      // ─────────────────────────────────────
-      // Open in Xcode
-      // ─────────────────────────────────────
-      let workspace = finalDir.appendingPathComponent("\(name).xcworkspace")
-      let project = finalDir.appendingPathComponent("\(name).xcodeproj")
-
-      if fm.fileExists(atPath: workspace.path) {
-        try sh("open \"\(workspace.path)\"")
-      } else if fm.fileExists(atPath: project.path) {
-        try sh("open \"\(project.path)\"")
-      }
-
-      log.info("Created ✅ \(finalDir.path)")
-
-      // ─────────────────────────────────────
-      // Cleanup staging root
-      // ─────────────────────────────────────
-      try? fm.removeItem(at: P.staging)
-    } catch {
-      throw error
-    }
+    try requireTrialCapacity()
+    try runNewWorkflow(name: name, template: template, org: org, target: target, dir: dir)
+    try consumeTrialRun()
   }
 }
+
 
 struct Publish: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Publish current repo to GitHub (create repo + origin + push).")
 
-  @Option(help: "GitHub owner/org (default: WEBServices-ORG).") var owner: String? = "WEBServices-ORG"
+  @Option(help: "GitHub owner/org (default: WEBServices-ORG).") var owner: String = "WEBServices-ORG"
   @Flag(help: "Create as public (default: private).") var `public`: Bool = false
   @Flag(help: "Skip pushing (create repo + set origin only).") var noPush: Bool = false
 
@@ -371,10 +424,7 @@ struct Publish: ParsableCommand {
 
     _ = try sh("gh auth status")
 
-    let repoSlug: String = {
-      if let owner, !owner.isEmpty { return "\(owner)/\(repoName)" }
-      return repoName
-    }()
+    let repoSlug = owner.isEmpty ? repoName : "\(owner)/\(repoName)"
 
     let visibility = self.public ? "--public" : "--private"
 
@@ -413,14 +463,15 @@ struct Ship: ParsableCommand {
   @Flag(help: "Create GitHub repo as public (default: private).") var `public`: Bool = false
 
   func run() throws {
-    try requireTemplateExists(template)
-    let newCmd = try New.parse([name, "--template", template.rawValue, "--org", org, "--target", target])
-    try newCmd.run()
+    try requireTrialCapacity()
+    try runNewWorkflow(name: name, template: template, org: org, target: target, dir: nil)
 
     let repoPath = P.workPersonal.appendingPathComponent(name)
     let pubFlag = `public` ? "--public" : ""
     let devPath = P.tooling.appendingPathComponent("dev-cli/.build/release/dev")
     _ = try sh("cd '\(repoPath.path)' && '\(devPath.path)' publish \(pubFlag)")
+
+    try consumeTrialRun()
     log.info("Shipped ✅ WEBServices-ORG/\(name)")
   }
 }
