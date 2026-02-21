@@ -175,70 +175,6 @@ struct Bootstrap: ParsableCommand {
   }
 }
 
-struct Doctor: ParsableCommand {
-  static let configuration = CommandConfiguration(abstract: "Check health + run a smoke test.")
-  @Flag(help: "Skip smoke test (fast).") var fast: Bool = false
-
-  func run() throws {
-    log.info("Checking Xcode Command Line Tools…")
-    try requireXcodeCLT()
-    _ = try sh("xcodebuild -version")
-
-    log.info("Checking mise…")
-    try requireMise()
-    _ = try sh("mise --version")
-    _ = try sh("cd '\(P.miseDir.path)' && mise exec tuist -- tuist version")
-    _ = try sh("cd '\(P.miseDir.path)' && mise exec swiftlint -- swiftlint version")
-    _ = try sh("cd '\(P.miseDir.path)' && mise exec swiftformat -- swiftformat --version")
-
-    if fast {
-      log.info("FAST mode: smoke test skipped ✅")
-      return
-    }
-
-    // HARD RULE: Smoke test is headless. Xcode must not be open.
-    _ = try? sh("osascript -e 'tell application \"Xcode\" to quit'")
-    _ = try? sh("killall Xcode 2>/dev/null || true")
-    _ = try? sh("rm -rf ~/Library/Saved\\ Application\\ State/com.apple.dt.Xcode.savedState")
-
-    let name = "SmokeApp"
-    let smokeRoot = P.root.appendingPathComponent("work/.factory/.smoke")
-    try ensureDir(smokeRoot)
-    let stage = smokeRoot.appendingPathComponent("run-\(UUID().uuidString)")
-    // Unique smoke workspace per run, under hidden factory folder
-    try ensureDir(stage)
-
-    try requireTemplateExists(.macosSwiftUI)
-    let tpl = templatePath(.macosSwiftUI)
-    try copyTree(from: tpl, to: stage)
-
-    let tokens: [String:String] = [
-      "{{PRODUCT_NAME}}": name,
-      "{{BUNDLE_PREFIX}}": "com.webservicesdev",
-      "{{DEPLOYMENT_TARGET}}": "15.0"
-    ]
-    try replaceTokens(in: stage.appendingPathComponent("Project.swift"), tokens: tokens)
-    try replaceTokens(in: stage.appendingPathComponent("Sources/App/ContentView.swift"), tokens: tokens)
-    let testFile = stage.appendingPathComponent("Tests/AppTests/{{PRODUCT_NAME}}Tests.swift")
-    if FileManager.default.fileExists(atPath: testFile.path) {
-      try replaceTokens(in: testFile, tokens: tokens)
-    }
-
-    let stagePath = stage.path
-    _ = try sh("cd '\(stagePath)' && mise trust")
-    _ = try sh("cd '\(stagePath)' && mise install")
-    _ = try sh("cd '\(stagePath)' && mise exec tuist -- tuist generate --no-open")
-    _ = try? sh("osascript -e 'tell application \"Xcode\" to quit'")
-
-    log.info("Smoke: xcodebuild test…")
-    _ = try sh("cd '\(stagePath)' && xcodebuild test -scheme \(name) -destination 'platform=macOS' -quiet")
-
-    try? FileManager.default.removeItem(at: stage)
-    _ = try? sh("rm -rf ~/Library/Saved\\ Application\\ State/com.apple.dt.Xcode.savedState")
-    log.info("Doctor ✅ (including smoke test)")
-  }
-}
-
 struct New: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Create a new project from a template.")
   @Argument(help: "App name.") var name: String
@@ -456,7 +392,7 @@ struct Ship: ParsableCommand {
 struct Version: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Print dev CLI version information.")
 
-  static let current = "0.1.28"
+  static let current = "0.1.29"
 
   func run() throws {
     // Best-effort git SHA (works in repo builds; harmless otherwise)
