@@ -354,6 +354,11 @@ struct New: ParsableCommand {
       }
 
       log.info("Created ✅ \(finalDir.path)")
+
+      // ─────────────────────────────────────
+      // Cleanup staging root
+      // ─────────────────────────────────────
+      try? fm.removeItem(at: P.staging)
     } catch {
       try? fm.removeItem(at: stagingDir)
       throw error
@@ -444,7 +449,7 @@ struct Ship: ParsableCommand {
 struct Version: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Print dev CLI version information.")
 
-  static let current = "0.1.25"
+  static let current = "0.1.26"
 
   func run() throws {
     // Best-effort git SHA (works in repo builds; harmless otherwise)
