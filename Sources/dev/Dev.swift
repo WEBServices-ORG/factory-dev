@@ -9,8 +9,8 @@ enum P {
   static let tooling = root.appendingPathComponent("tooling")
   static let templates = root.appendingPathComponent("templates")
   static let config = root.appendingPathComponent("config")
-  static let staging = root.appendingPathComponent("work/.staging")
-  static let workPersonal = root.appendingPathComponent("work/personal")
+  static let staging = root.appendingPathComponent(".staging")
+  static let workPersonal = root
   static let miseDir = config.appendingPathComponent("mise")
   static let miseToml = miseDir.appendingPathComponent("mise.toml")
 }
@@ -245,7 +245,7 @@ struct New: ParsableCommand {
   @Option(name: .shortAndLong, help: "Template (default: macos-swiftui).") var template: TemplateSlot = .macosSwiftUI
   @Option(help: "Bundle ID prefix.") var org: String = "com.webservicesdev"
   @Option(help: "Deployment target (macOS).") var target: String = "15.0"
-  @Option(help: "Output directory (default: ~/Developer/work/personal/<Name>).") var dir: String?
+  @Option(help: "Output directory (default: ~/Developer/<Name>).") var dir: String?
 
   func run() throws {
     let fm = FileManager.default
@@ -444,7 +444,7 @@ struct Ship: ParsableCommand {
 struct Version: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Print dev CLI version information.")
 
-  static let current = "0.1.23"
+  static let current = "0.1.24"
 
   func run() throws {
     // Best-effort git SHA (works in repo builds; harmless otherwise)
