@@ -65,11 +65,13 @@ func requireXcodeCLT() throws {
       """
       Xcode Command Line Tools are not installed.
 
-      Install them and run again:
+      Install and run again:
         xcode-select --install
 
       Documentation:
-      https://developer.apple.com/xcode/
+        https://developer.apple.com/xcode/
+
+      Foundry maintains a canonical local environment.
       """
     )
   }
@@ -86,6 +88,8 @@ func requireMise() throws {
 
       Then run:
         foundry install
+
+      Foundry maintains a canonical local environment.
       """
     )
   }
@@ -96,12 +100,12 @@ func requireTemplateExists(_ slot: TemplateSlot) throws {
   guard FileManager.default.fileExists(atPath: src.path) else {
     throw RuntimeError(description:
       """
-      Template '\(slot.rawValue)' not found.
+      Required template not found.
 
       Run:
         foundry install
 
-      If the problem persists, reinstall Foundry.
+      Foundry maintains a canonical local environment.
       """
     )
   }
@@ -406,7 +410,7 @@ struct Ship: ParsableCommand {
 struct Version: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Print dev CLI version information.")
 
-  static let current = "0.1.17"
+  static let current = "0.1.18"
 
   func run() throws {
     // Best-effort git SHA (works in repo builds; harmless otherwise)
