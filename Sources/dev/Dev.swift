@@ -318,6 +318,16 @@ struct New: ParsableCommand {
 
       try ensureDir(out.deletingLastPathComponent())
       try FileManager.default.moveItem(at: stage, to: out)
+
+      let finalWorkspace = out.appendingPathComponent("\(name).xcworkspace")
+      let finalProject = out.appendingPathComponent("\(name).xcodeproj")
+
+      if FileManager.default.fileExists(atPath: finalWorkspace.path) {
+        try sh("open \"\(finalWorkspace.path)\"")
+      } else if FileManager.default.fileExists(atPath: finalProject.path) {
+        try sh("open \"\(finalProject.path)\"")
+      }
+
       log.info("Created ✅ \(out.path)")
     } catch {
       try? FileManager.default.removeItem(at: stage)
@@ -409,7 +419,7 @@ struct Ship: ParsableCommand {
 struct Version: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Print dev CLI version information.")
 
-  static let current = "0.1.21"
+  static let current = "0.1.22"
 
   func run() throws {
     // Best-effort git SHA (works in repo builds; harmless otherwise)
