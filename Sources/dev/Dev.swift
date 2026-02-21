@@ -119,7 +119,7 @@ enum TemplateSlot: String, CaseIterable, ExpressibleByArgument {
 
 func templatePath(_ slot: TemplateSlot) -> URL {
   switch slot {
-  case .macosSwiftUI: return P.templates.appendingPathComponent("swiftui-macos-app")
+  case .macosSwiftUI: return P.templates.appendingPathComponent("macos-swiftui")
   case .internalLib:  return P.templates.appendingPathComponent("internal-lib")
   case .cliTool:      return P.templates.appendingPathComponent("cli-tool")
   }
@@ -444,7 +444,7 @@ struct Ship: ParsableCommand {
 struct Version: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Print dev CLI version information.")
 
-  static let current = "0.1.24"
+  static let current = "0.1.25"
 
   func run() throws {
     // Best-effort git SHA (works in repo builds; harmless otherwise)
