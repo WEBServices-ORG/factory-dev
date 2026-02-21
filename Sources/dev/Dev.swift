@@ -55,8 +55,6 @@ func replaceTokens(in url: URL, tokens: [String:String]) throws {
   try write(url, s)
 }
 
-/// Hard requirement: Xcode Command Line Tools must be installed.
-/// Apple-mode: do not auto-install; stop with a clear instruction.
 func requireXcodeCLT() throws {
   do {
     _ = try sh("xcode-select -p")
@@ -65,13 +63,11 @@ func requireXcodeCLT() throws {
       """
       Xcode Command Line Tools are not installed.
 
-      Install and run again:
+      Install:
         xcode-select --install
 
-      Documentation:
+      Docs:
         https://developer.apple.com/xcode/
-
-      Foundry maintains a canonical local environment.
       """
     )
   }
@@ -85,29 +81,38 @@ func requireMise() throws {
 
       Install mise:
         https://mise.jdx.dev/
-
-      Then run:
-        foundry install
-
-      Foundry maintains a canonical local environment.
       """
     )
   }
 }
 
+func ensureEnvironmentReady() throws {
+  let fm = FileManager.default
+  
+  if !fm.fileExists(atPath: P.root.path) {
+    try ensureDir(P.root)
+    try ensureDir(P.tooling)
+    try ensureDir(P.config)
+  }
+  
+  if !fm.fileExists(atPath: P.templates.path) {
+    try ensureDir(P.templates)
+    let templatesRepo = P.templates.appendingPathComponent("factory-templates")
+    _ = try? sh("git clone https://github.com/WEBServices-ORG/factory-templates.git '\(templatesRepo.path)' 2>/dev/null || true")
+    
+    let src = templatesRepo.appendingPathComponent("swiftui-macos-app")
+    let dst = P.templates.appendingPathComponent("macos-swiftui")
+    if fm.fileExists(atPath: src.path) && !fm.fileExists(atPath: dst.path) {
+      try fm.copyItem(at: src, to: dst)
+    }
+  }
+}
+
 func requireTemplateExists(_ slot: TemplateSlot) throws {
+  try ensureEnvironmentReady()
   let src = templatePath(slot)
   guard FileManager.default.fileExists(atPath: src.path) else {
-    throw RuntimeError(description:
-      """
-      Required template not found.
-
-      Run:
-        foundry install
-
-      Foundry maintains a canonical local environment.
-      """
-    )
+    throw RuntimeError(description: "Template '\(slot.rawValue)' unavailable.")
   }
 }
 
@@ -392,7 +397,7 @@ struct Ship: ParsableCommand {
 struct Version: ParsableCommand {
   static let configuration = CommandConfiguration(abstract: "Print dev CLI version information.")
 
-  static let current = "0.1.30"
+  static let current = "0.1.31"
 
   func run() throws {
     // Best-effort git SHA (works in repo builds; harmless otherwise)

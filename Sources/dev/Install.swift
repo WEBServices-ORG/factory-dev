@@ -7,8 +7,7 @@ struct Install: ParsableCommand {
     )
 
     func run() throws {
-
-        print("Checking Xcode Command Line Tools...")
+        let fm = FileManager.default
 
         do {
             try sh("xcode-select -p > /dev/null 2>&1")
@@ -16,7 +15,7 @@ struct Install: ParsableCommand {
             throw RuntimeError(description: """
             Xcode Command Line Tools are not installed.
 
-            Install and run again:
+            Install:
               xcode-select --install
 
             Docs:
@@ -24,7 +23,19 @@ struct Install: ParsableCommand {
             """)
         }
 
-        print("Environment looks good.")
+        try ensureEnvironmentReady()
+
+        try ensureDir(P.config)
+        try ensureDir(P.miseDir)
+        if !fm.fileExists(atPath: P.miseToml.path) {
+            try write(P.miseToml, """
+            [tools]
+            tuist = "4.0.0"
+            swiftlint = "0.63.2"
+            swiftformat = "0.58.0"
+            """)
+        }
+
         print("Foundry install complete.")
     }
 }
